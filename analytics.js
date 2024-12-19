@@ -19,17 +19,9 @@ const db = getFirestore(app);
 
 // Helper Function: Get the current domain (hostname) without 'www.' and replace '.' with '-'
 function getDomainKey() {
-  let domain = window.location.hostname; // Get the domain name (e.g., www.example.com or example.com)
-  
-  // Remove 'www.' if it exists at the start of the domain
-  if (domain.startsWith('www.')) {
-    domain = domain.slice(4); // Remove the first 4 characters (i.e., 'www.')
-  }
-
-  // Replace '.' with '-' in the domain
-  domain = domain.replace(/\./g, '-'); // Replace all '.' characters with '-'
-
-  return domain; // Return the modified domain
+  let domain = window.location.hostname;
+  if (domain.startsWith('www.')) domain = domain.slice(4); // Remove 'www.'
+  return domain.replace(/\./g, '-'); // Replace '.' with '-'
 }
 
 // Helper Function: Generate a unique session ID for the user
@@ -47,10 +39,10 @@ async function getUserIp() {
   try {
     const response = await fetch('https://api.ipify.org?format=json');
     const data = await response.json();
-    return data.ip;  // Return the IP address
+    return data.ip;
   } catch (error) {
     console.error("Error fetching IP address:", error);
-    return null; // Return null if IP can't be fetched
+    return null;
   }
 }
 
@@ -63,47 +55,32 @@ function getCurrentDate() {
   return `${month}-${day}-${year}`;
 }
 
-// Track Analytics
+// Main Function: Track Analytics
 async function trackAnalytics() {
-  const key = getDomainKey(); // Use the current domain as the key, with '.' replaced by '-'
-  console.log("Tracking analytics for domain:", key);
-
+  const key = getDomainKey();
   if (!key) {
     console.error("No domain found for analytics tracking.");
     return;
   }
 
   const sessionId = getOrSetSessionId();
-  const ipAddress = await getUserIp(); // Fetch the IP address
+  const ipAddress = await getUserIp();
+  const date = getCurrentDate();
 
-  const date = getCurrentDate(); // Dynamically generate the date
-
-  // Reference for Firestore document based on the domain key
-  const docRef = doc(db, "websites/", key + "/analytics/" + date);
+  const docRef = doc(db, "website/", key + "/analytics/" + date);
 
   try {
-    // Check if the document exists
     const docSnapshot = await getDoc(docRef);
     if (!docSnapshot.exists()) {
-      // Initialize the document if it doesn't exist
-      await setDoc(docRef, {
-        totalpageviews: 0,
-        sessions: 0,
-      });
+      await setDoc(docRef, { pageViews: 0, sessions: 0 });
     }
 
-    // Increment page views
-    await updateDoc(docRef, { totalpageviews: increment(1) });
+    await updateDoc(docRef, { pageViews: increment(1) });
 
-    // Increment sessions if it's a new session
-    const sessionDocRef = doc(db, `websites/${key}/sessions`, sessionId);
+    const sessionDocRef = doc(db, `website/${key}/sessions`, sessionId);
     const sessionSnapshot = await getDoc(sessionDocRef);
     if (!sessionSnapshot.exists()) {
-      await setDoc(sessionDocRef, {
-        sessionId: sessionId,
-        timestamp: Date.now(),
-        ipAddress: ipAddress,  // Save IP address to the session document
-      });
+      await setDoc(sessionDocRef, { sessionId, timestamp: Date.now(), ipAddress });
       await updateDoc(docRef, { sessions: increment(1) });
     }
   } catch (error) {
@@ -111,5 +88,28 @@ async function trackAnalytics() {
   }
 }
 
+// Automatically Track Analytics on Route Changes
+function trackRouteChanges() {
+  // Track the initial page load
+  trackAnalytics();
+
+  // Detect route changes using the 'popstate' and 'pushState' events
+  window.addEventListener('popstate', trackAnalytics); // For back/forward navigation
+
+  // Override `pushState` and `replaceState` to detect React Router's programmatic navigation
+  const originalPushState = history.pushState;
+  const originalReplaceState = history.replaceState;
+
+  history.pushState = function (...args) {
+    originalPushState.apply(this, args);
+    trackAnalytics(); // Trigger analytics on navigation
+  };
+
+  history.replaceState = function (...args) {
+    originalReplaceState.apply(this, args);
+    trackAnalytics(); // Trigger analytics on navigation
+  };
+}
+
 // Initialize Tracking
-trackAnalytics();
+trackRouteChanges();
