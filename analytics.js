@@ -67,7 +67,7 @@ async function trackAnalytics() {
   const ipAddress = await getUserIp();
   const date = getCurrentDate();
 
-  const docRef = doc(db, "website/", key + "/analytics/" + date);
+  const docRef = doc(db, "websites/", key + "/analytics/" + date);
 
   try {
     const docSnapshot = await getDoc(docRef);
@@ -77,7 +77,7 @@ async function trackAnalytics() {
 
     await updateDoc(docRef, { pageViews: increment(1) });
 
-    const sessionDocRef = doc(db, `website/${key}/sessions`, sessionId);
+    const sessionDocRef = doc(db, `websites/${key}/sessions`, sessionId);
     const sessionSnapshot = await getDoc(sessionDocRef);
     if (!sessionSnapshot.exists()) {
       await setDoc(sessionDocRef, { sessionId, timestamp: Date.now(), ipAddress });
